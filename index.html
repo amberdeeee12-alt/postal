@@ -423,7 +423,12 @@ function doSearch() {
         <span>📋</span> 複製地名
       </button>
     `;
-    copyToClipboard(result);
+    // 複製後清空輸入框並重新聚焦，方便連續查詢
+    copyToClipboard(result, () => {
+      input.value = '';
+      clearResult();
+      input.focus();
+    });
     addToHistory(code, result);
   } else {
     currentResult = '';
@@ -448,11 +453,12 @@ function copyResult() {
   }, 2000);
 }
 
-function copyToClipboard(text) {
+function copyToClipboard(text, callback) {
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(showToast).catch(() => fallbackCopy(text));
+    navigator.clipboard.writeText(text).then(() => { showToast(); if (callback) callback(); }).catch(() => { fallbackCopy(text); if (callback) callback(); });
   } else {
     fallbackCopy(text);
+    if (callback) callback();
   }
 }
 
