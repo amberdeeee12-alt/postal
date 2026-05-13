@@ -452,20 +452,33 @@ function doSearch(autoCopy = true) {
 async function copyAndClearInput(text) {
   isSearching = true;
 
-  const ok = await copyToClipboard(text);
-
-  // 不論瀏覽器使用 Clipboard API 或 fallback，只要複製流程結束，就清空原本的 3 碼
+  // 先把要複製的結果存起來，再立刻清除輸入框。
+  // 這樣即使瀏覽器的 Clipboard API 較慢或被擋，也不會卡住清除動作。
+  const textToCopy = text;
   input.value = '';
   input.focus();
+
+  let ok = false;
+  try {
+    ok = await copyToClipboard(textToCopy);
+  } finally {
+    // 再強制清一次，避免部分瀏覽器或自動填入機制把 3 碼留在畫面上。
+    input.value = '';
+    input.focus();
+    setTimeout(() => {
+      input.value = '';
+      input.focus();
+    }, 0);
+
+    isSearching = false;
+  }
 
   if (ok) {
     showToast('✓ 已自動複製，輸入框已清除！');
     markCopyButtonCopied();
   } else {
-    showToast('⚠️ 已清除輸入框，但瀏覽器可能封鎖自動複製');
+    showToast('⚠️ 輸入框已清除，但瀏覽器可能封鎖自動複製');
   }
-
-  isSearching = false;
 }
 
 function clearResult() {
