@@ -396,19 +396,28 @@ function setStatus(type, msg) {
 
 input.addEventListener('input', () => {
   if (isSearching) return;
-  const val = input.value.replace(/\D/g, '');
+
+  // 只允許輸入數字，並限制最多 3 碼
+  const val = input.value.replace(/\D/g, '').slice(0, 3);
   input.value = val;
-  if (val.length === 3) doSearch();
-  else if (val.length < 3) clearResult();
+
+  // 輸入滿 3 碼後：自動查詢、自動複製、清空輸入框
+  if (val.length === 3) {
+    doSearch(true);
+  } else {
+    clearResult();
+  }
 });
 
 input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') doSearch();
+  if (e.key === 'Enter') doSearch(true);
 });
 
-function doSearch() {
+function doSearch(autoCopy = true) {
+  if (isSearching) return;
+
   const code = input.value.trim();
-  if (!code || code.length < 3) return;
+  if (!/^\d{3}$/.test(code)) return;
 
   const result = POSTAL[code];
   const resultArea = document.getElementById('resultArea');
@@ -420,24 +429,43 @@ function doSearch() {
     currentResult = result;
     resultContent.innerHTML = `
       <div class="result-label">查詢結果</div>
-      <div class="result-text">${result}</div>
+      <div class="result-text">${escapeHtml(result)}</div>
       <button class="copy-btn" id="copyBtn" onclick="copyResult()">
         <span>📋</span> 複製地名
       </button>
     `;
-    // 複製後清空輸入框並重新聚焦，方便連續查詢
-    copyToClipboard(result, () => {
-      isSearching = true;
-      input.value = '';
-      clearResult();
-      input.focus();
-      isSearching = false;
-    });
+
     addToHistory(code, result);
+
+    // 重點：輸入滿 3 碼後自動複製，複製完成後清除原本輸入的 3 碼
+    if (autoCopy) {
+      copyAndClearInput(result);
+    }
   } else {
     currentResult = '';
-    resultContent.innerHTML = `<div class="error-text">❌ 找不到郵遞區號 <strong>${code}</strong></div>`;
+    resultContent.innerHTML = `<div class="error-text">❌ 找不到郵遞區號 <strong>${escapeHtml(code)}</strong></div>`;
+    // 找不到時先不清除，方便你修改原本輸入的號碼
+    input.select();
   }
+}
+
+async function copyAndClearInput(text) {
+  isSearching = true;
+
+  const ok = await copyToClipboard(text);
+
+  // 不論瀏覽器使用 Clipboard API 或 fallback，只要複製流程結束，就清空原本的 3 碼
+  input.value = '';
+  input.focus();
+
+  if (ok) {
+    showToast('✓ 已自動複製，輸入框已清除！');
+    markCopyButtonCopied();
+  } else {
+    showToast('⚠️ 已清除輸入框，但瀏覽器可能封鎖自動複製');
+  }
+
+  isSearching = false;
 }
 
 function clearResult() {
@@ -445,40 +473,68 @@ function clearResult() {
   currentResult = '';
 }
 
-function copyResult() {
+async function copyResult() {
   if (!currentResult) return;
-  copyToClipboard(currentResult);
-  const btn = document.getElementById('copyBtn');
-  btn.classList.add('copied');
-  btn.innerHTML = '<span>✓</span> 已複製！';
-  setTimeout(() => {
-    btn.classList.remove('copied');
-    btn.innerHTML = '<span>📋</span> 複製地名';
-  }, 2000);
+  const ok = await copyToClipboard(currentResult);
+  if (ok) {
+    showToast('✓ 已複製到剪貼簿！');
+    markCopyButtonCopied();
+  } else {
+    showToast('⚠️ 複製失敗，請手動複製');
+  }
 }
 
-function copyToClipboard(text, callback) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => { showToast(); if (callback) callback(); }).catch(() => { fallbackCopy(text); if (callback) callback(); });
-  } else {
-    fallbackCopy(text);
-    if (callback) callback();
+async function copyToClipboard(text) {
+  // HTTPS 或 localhost 通常可使用 navigator.clipboard
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      // 若失敗，改用 fallback
+    }
   }
+
+  return fallbackCopy(text);
 }
 
 function fallbackCopy(text) {
   const el = document.createElement('textarea');
   el.value = text;
-  el.style.cssText = 'position:fixed;opacity:0';
+  el.setAttribute('readonly', '');
+  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
   document.body.appendChild(el);
+  el.focus();
   el.select();
-  document.execCommand('copy');
+  el.setSelectionRange(0, el.value.length);
+
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch (err) {
+    ok = false;
+  }
+
   document.body.removeChild(el);
-  showToast();
+  return ok;
 }
 
-function showToast() {
+function markCopyButtonCopied() {
+  const btn = document.getElementById('copyBtn');
+  if (!btn) return;
+
+  btn.classList.add('copied');
+  btn.innerHTML = '<span>✓</span> 已複製！';
+  setTimeout(() => {
+    if (!document.getElementById('copyBtn')) return;
+    btn.classList.remove('copied');
+    btn.innerHTML = '<span>📋</span> 複製地名';
+  }, 1600);
+}
+
+function showToast(message = '✓ 已複製到剪貼簿！') {
   const toast = document.getElementById('toast');
+  toast.textContent = message;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2200);
 }
@@ -496,15 +552,28 @@ function renderHistory() {
   if (history.length === 0) { section.style.display = 'none'; return; }
   section.style.display = 'block';
   list.innerHTML = history.map(h => `
-    <div class="history-item" onclick="selectHistory('${h.code}')">
-      <span class="code">${h.code}</span>${h.result}
+    <div class="history-item" onclick="selectHistory('${escapeAttr(h.code)}')">
+      <span class="code">${escapeHtml(h.code)}</span>${escapeHtml(h.result)}
     </div>
   `).join('');
 }
 
 function selectHistory(code) {
   input.value = code;
-  doSearch();
+  doSearch(true);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/`/g, '&#096;');
 }
 
 // 啟動時載入資料
