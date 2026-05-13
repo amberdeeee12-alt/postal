@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>郵遞區號查詢</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a24;
+    --surface2: #22222f;
+    --accent: #4f8ef7;
+    --accent2: #7c5ef5;
+    --success: #34d399;
+    --error: #f87171;
+    --warning: #fbbf24;
+    --text: #e8e8f0;
+    --text-dim: #7070a0;
+    --border: #2e2e45;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 30%, rgba(79,142,247,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 80% 70%, rgba(124,94,245,0.07) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+  }
+
+  .header p {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
+  .status-dot.ok { background: var(--success); }
+  .status-dot.error { background: var(--error); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+
+  .input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 1.5rem;
+    font-family: 'Noto Sans TC', sans-serif;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.1em;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    -webkit-text-fill-color: var(--text);
+    width: 100%;
+  }
+
+  input[type="text"]::placeholder {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 1rem;
+    letter-spacing: 0;
+  }
+
+  input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79,142,247,0.15);
+  }
+
+  input[type="text"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .search-btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 12px;
+    padding: 0 20px;
+    font-size: 1.3rem;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+  .search-btn:active { transform: scale(0.98); }
+  .search-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .result-area { display: none; }
+  .result-area.visible { display: block; }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 24px;
+  }
+
+  .result-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  .result-text {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 16px;
+    line-height: 1.3;
+  }
+
+  .copy-btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--success), #059669);
+    border: none;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 1rem;
+    font-family: 'Noto Sans TC', sans-serif;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .copy-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(52,211,153,0.3); }
+  .copy-btn:active { transform: translateY(0); }
+  .copy-btn.copied { background: linear-gradient(135deg, #6ee7b7, #34d399); }
+
+  .error-text {
+    color: var(--error);
+    font-size: 1rem;
+    text-align: center;
+    padding: 12px 0;
+  }
+
+  .history {
+    margin-top: 24px;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+
+  .history-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+
+  .history-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .history-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--text-dim);
+  }
+
+  .history-item:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(79,142,247,0.1);
+  }
+
+  .history-item .code {
+    font-weight: 700;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--success);
+    color: #064e3b;
+    padding: 12px 24px;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 100;
+    white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(52,211,153,0.4);
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .count-tag {
+    display: inline-block;
+    background: rgba(79,142,247,0.15);
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>📮 郵遞區號查詢</h1>
+    <p>輸入前 3 碼，自動複製對應地名</p>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot loading" id="statusDot"></div>
+    <span id="statusText">正在從 Google 試算表載入資料…</span>
+  </div>
+
+  <div class="card">
+    <div class="input-group">
+      <input
+        type="text"
+        id="postalInput"
+        maxlength="3"
+        placeholder="輸入 3 碼…"
+        inputmode="numeric"
+        autocomplete="off"
+        disabled
+      >
+      <button class="search-btn" id="searchBtn" onclick="doSearch()" title="查詢" disabled>🔍</button>
+    </div>
+
+    <div class="result-area" id="resultArea">
+      <div class="divider"></div>
+      <div id="resultContent"></div>
+    </div>
+
+    <div class="history" id="historySection" style="display:none">
+      <div class="history-label">最近查詢</div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">✓ 已複製到剪貼簿！</div>
+
+<script>
+// ============================================================
+//  ⚙️  設定區：把你的 Google 試算表 ID 填在這裡
+//  試算表網址長這樣：
+//  https://docs.google.com/spreadsheets/d/【這一段就是ID】/edit
+// ============================================================
+const SHEET_ID = '1z7LWssN9EkRMz0rSrUhalChGhIoObK2Qs2rGVzZg8CQ';
+const SHEET_NAME = 'Sheet1'; // 工作表名稱（預設 Sheet1）
+// ============================================================
+
+let POSTAL = {};
+let history = [];
+let currentResult = '';
+let isSearching = false;
+
+const input = document.getElementById('postalInput');
+const searchBtn = document.getElementById('searchBtn');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+
+async function loadFromSheets() {
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('無法連線');
+    const csv = await res.text();
+
+    // Parse CSV: each row is "郵遞區號","字串"
+    const lines = csv.trim().split('\n');
+    let count = 0;
+    for (const line of lines) {
+      // Handle quoted CSV values
+      const parts = line.match(/(".*?"|[^,]+)(?=,|$)/g);
+      if (!parts || parts.length < 2) continue;
+      const code = parts[0].replace(/"/g, '').trim();
+      const value = parts[1].replace(/"/g, '').trim();
+      if (code && value && /^\d{3}$/.test(code)) {
+        POSTAL[code] = value;
+        count++;
+      }
+    }
+
+    if (count === 0) throw new Error('試算表沒有資料，請確認格式');
+
+    setStatus('ok', `已載入 ${count} 筆資料`);
+    input.disabled = false;
+    searchBtn.disabled = false;
+    input.focus();
+  } catch (err) {
+    setStatus('error', `載入失敗：${err.message}｜請確認試算表已公開`);
+  }
+}
+
+function setStatus(type, msg) {
+  statusDot.className = 'status-dot ' + type;
+  statusText.textContent = msg;
+}
+
+input.addEventListener('input', () => {
+  if (isSearching) return;
+
+  // 只允許輸入數字，並限制最多 3 碼
+  const val = input.value.replace(/\D/g, '').slice(0, 3);
+  input.value = val;
+
+  // 輸入滿 3 碼後：自動查詢、自動複製、清空輸入框
+  if (val.length === 3) {
+    doSearch(true);
+  } else {
+    clearResult();
+  }
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doSearch(true);
+});
+
+function doSearch(autoCopy = true) {
+  if (isSearching) return;
+
+  const code = input.value.trim();
+  if (!/^\d{3}$/.test(code)) return;
+
+  const result = POSTAL[code];
+  const resultArea = document.getElementById('resultArea');
+  const resultContent = document.getElementById('resultContent');
+
+  resultArea.classList.add('visible');
+
+  if (result) {
+    currentResult = result;
+    resultContent.innerHTML = `
+      <div class="result-label">查詢結果</div>
+      <div class="result-text">${escapeHtml(result)}</div>
+      <button class="copy-btn" id="copyBtn" onclick="copyResult()">
+        <span>📋</span> 複製地名
+      </button>
+    `;
+
+    addToHistory(code, result);
+
+    // 重點：輸入滿 3 碼後自動複製，複製完成後清除原本輸入的 3 碼
+    if (autoCopy) {
+      copyAndClearInput(result);
+    }
+  } else {
+    currentResult = '';
+    resultContent.innerHTML = `<div class="error-text">❌ 找不到郵遞區號 <strong>${escapeHtml(code)}</strong></div>`;
+    // 找不到時先不清除，方便你修改原本輸入的號碼
+    input.select();
+  }
+}
+
+async function copyAndClearInput(text) {
+  isSearching = true;
+
+  const ok = await copyToClipboard(text);
+
+  // 不論瀏覽器使用 Clipboard API 或 fallback，只要複製流程結束，就清空原本的 3 碼
+  input.value = '';
+  input.focus();
+
+  if (ok) {
+    showToast('✓ 已自動複製，輸入框已清除！');
+    markCopyButtonCopied();
+  } else {
+    showToast('⚠️ 已清除輸入框，但瀏覽器可能封鎖自動複製');
+  }
+
+  isSearching = false;
+}
+
+function clearResult() {
+  document.getElementById('resultArea').classList.remove('visible');
+  currentResult = '';
+}
+
+async function copyResult() {
+  if (!currentResult) return;
+  const ok = await copyToClipboard(currentResult);
+  if (ok) {
+    showToast('✓ 已複製到剪貼簿！');
+    markCopyButtonCopied();
+  } else {
+    showToast('⚠️ 複製失敗，請手動複製');
+  }
+}
+
+async function copyToClipboard(text) {
+  // HTTPS 或 localhost 通常可使用 navigator.clipboard
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      // 若失敗，改用 fallback
+    }
+  }
+
+  return fallbackCopy(text);
+}
+
+function fallbackCopy(text) {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.setAttribute('readonly', '');
+  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  el.setSelectionRange(0, el.value.length);
+
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch (err) {
+    ok = false;
+  }
+
+  document.body.removeChild(el);
+  return ok;
+}
+
+function markCopyButtonCopied() {
+  const btn = document.getElementById('copyBtn');
+  if (!btn) return;
+
+  btn.classList.add('copied');
+  btn.innerHTML = '<span>✓</span> 已複製！';
+  setTimeout(() => {
+    if (!document.getElementById('copyBtn')) return;
+    btn.classList.remove('copied');
+    btn.innerHTML = '<span>📋</span> 複製地名';
+  }, 1600);
+}
+
+function showToast(message = '✓ 已複製到剪貼簿！') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function addToHistory(code, result) {
+  history = history.filter(h => h.code !== code);
+  history.unshift({ code, result });
+  if (history.length > 8) history = history.slice(0, 8);
+  renderHistory();
+}
+
+function renderHistory() {
+  const section = document.getElementById('historySection');
+  const list = document.getElementById('historyList');
+  if (history.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = history.map(h => `
+    <div class="history-item" onclick="selectHistory('${escapeAttr(h.code)}')">
+      <span class="code">${escapeHtml(h.code)}</span>${escapeHtml(h.result)}
+    </div>
+  `).join('');
+}
+
+function selectHistory(code) {
+  input.value = code;
+  doSearch(true);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/`/g, '&#096;');
+}
+
+// 啟動時載入資料
+loadFromSheets();
+</script>
+</body>
+</html>
