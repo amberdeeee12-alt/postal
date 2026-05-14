@@ -74,7 +74,6 @@
     font-size: 0.9rem;
   }
 
-  /* Status bar */
   .status-bar {
     display: flex;
     align-items: center;
@@ -282,17 +281,6 @@
   }
 
   .toast.show { transform: translateX(-50%) translateY(0); }
-
-  .count-tag {
-    display: inline-block;
-    background: rgba(79,142,247,0.15);
-    color: var(--accent);
-    border-radius: 6px;
-    padding: 2px 8px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    margin-left: 6px;
-  }
 </style>
 </head>
 <body>
@@ -337,10 +325,6 @@
 <div class="toast" id="toast">✓ 已複製到剪貼簿！</div>
 
 <script>
-// ============================================================
-//  ✅ 內建郵遞區號資料：不再連 Google 試算表，避免 Failed to fetch
-//  資料來源：使用者提供的 Excel，共 365 筆
-// ============================================================
 const POSTAL = {
   "100": "臺北市中正區",
   "103": "臺北市大同區",
@@ -431,9 +415,9 @@ const POSTAL = {
   "338": "桃園市蘆竹區",
   "350": "苗栗縣竹南鎮",
   "351": "苗栗縣頭份市",
-  "352": "苗栗縣三  灣",
-  "353": "苗栗縣南  庄",
-  "354": "苗栗縣獅  潭",
+  "352": "苗栗縣三灣鄉",
+  "353": "苗栗縣南庄鄉",
+  "354": "苗栗縣獅潭鄉",
   "356": "苗栗縣後龍鎮",
   "357": "苗栗縣通霄鎮",
   "358": "苗栗縣苑裡鎮",
@@ -635,6 +619,12 @@ const POSTAL = {
   "883": "澎湖縣七美鄉",
   "884": "澎湖縣白沙鄉",
   "885": "澎湖縣湖西鄉",
+  "890": "金門縣金沙鎮",
+  "891": "金門縣金湖鎮",
+  "892": "金門縣金寧鄉",
+  "893": "金門縣金城鎮",
+  "894": "金門縣烈嶼鄉",
+  "896": "金門縣烏坵鄉",
   "900": "屏東縣屏東市",
   "901": "屏東縣三地門鄉",
   "902": "屏東縣霧臺鄉",
@@ -697,18 +687,11 @@ const POSTAL = {
   "981": "花蓮縣玉里鄉",
   "982": "花蓮縣卓溪鄉",
   "983": "花蓮縣富里鄉",
-  "890": "金門縣金沙鎮",
-  "891": "金門縣金湖鎮",
-  "892": "金門縣金寧鄉",
-  "893": "金門縣金城鎮",
-  "894": "金門縣烈嶼鄉",
-  "896": "金門縣烏坵鄉",
   "209": "連江縣南竿鄉",
   "210": "連江縣北竿鄉",
   "211": "連江縣莒光鄉",
   "212": "連江縣東引鄉"
 };
-// ============================================================
 
 let history = [];
 let currentResult = '';
@@ -734,12 +717,8 @@ function setStatus(type, msg) {
 
 input.addEventListener('input', () => {
   if (isSearching) return;
-
-  // 只允許輸入數字，並限制最多 3 碼
   const val = input.value.replace(/\D/g, '').slice(0, 3);
   input.value = val;
-
-  // 輸入滿 3 碼後：自動查詢、自動複製、清空輸入框
   if (val.length === 3) {
     doSearch(true);
   } else {
@@ -753,7 +732,6 @@ input.addEventListener('keydown', (e) => {
 
 function doSearch(autoCopy = true) {
   if (isSearching) return;
-
   const code = input.value.trim();
   if (!/^\d{3}$/.test(code)) return;
 
@@ -772,26 +750,19 @@ function doSearch(autoCopy = true) {
         <span>📋</span> 複製地名
       </button>
     `;
-
     addToHistory(code, result);
-
-    // 重點：輸入滿 3 碼後自動複製，複製完成後清除原本輸入的 3 碼
     if (autoCopy) {
       copyAndClearInput(result);
     }
   } else {
     currentResult = '';
     resultContent.innerHTML = `<div class="error-text">❌ 找不到郵遞區號 <strong>${escapeHtml(code)}</strong></div>`;
-    // 找不到時先不清除，方便你修改原本輸入的號碼
     input.select();
   }
 }
 
 async function copyAndClearInput(text) {
   isSearching = true;
-
-  // 先把要複製的結果存起來，再立刻清除輸入框。
-  // 這樣即使瀏覽器的 Clipboard API 較慢或被擋，也不會卡住清除動作。
   const textToCopy = text;
   input.value = '';
   input.focus();
@@ -800,14 +771,9 @@ async function copyAndClearInput(text) {
   try {
     ok = await copyToClipboard(textToCopy);
   } finally {
-    // 再強制清一次，避免部分瀏覽器或自動填入機制把 3 碼留在畫面上。
     input.value = '';
     input.focus();
-    setTimeout(() => {
-      input.value = '';
-      input.focus();
-    }, 0);
-
+    setTimeout(() => { input.value = ''; input.focus(); }, 0);
     isSearching = false;
   }
 
@@ -836,16 +802,12 @@ async function copyResult() {
 }
 
 async function copyToClipboard(text) {
-  // HTTPS 或 localhost 通常可使用 navigator.clipboard
   if (navigator.clipboard && window.isSecureContext) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch (err) {
-      // 若失敗，改用 fallback
-    }
+    } catch (err) {}
   }
-
   return fallbackCopy(text);
 }
 
@@ -858,14 +820,8 @@ function fallbackCopy(text) {
   el.focus();
   el.select();
   el.setSelectionRange(0, el.value.length);
-
   let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } catch (err) {
-    ok = false;
-  }
-
+  try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
   document.body.removeChild(el);
   return ok;
 }
@@ -873,7 +829,6 @@ function fallbackCopy(text) {
 function markCopyButtonCopied() {
   const btn = document.getElementById('copyBtn');
   if (!btn) return;
-
   btn.classList.add('copied');
   btn.innerHTML = '<span>✓</span> 已複製！';
   setTimeout(() => {
@@ -927,7 +882,6 @@ function escapeAttr(str) {
   return escapeHtml(str).replace(/`/g, '&#096;');
 }
 
-// 啟動時啟用內建資料
 initPostalData();
 </script>
 </body>
